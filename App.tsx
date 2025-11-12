@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { GoogleGenAI } from "@google/genai";
 
 interface Scene {
@@ -50,28 +50,6 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    const scriptId = 'bmc-widget-script';
-    if (document.getElementById(scriptId)) {
-        return;
-    }
-    const script = document.createElement('script');
-    script.id = scriptId;
-    script.type = 'text/javascript';
-    script.src = 'https://cdnjs.buymeacoffee.com/1.0.0/button.prod.min.js';
-    script.setAttribute('data-name', 'bmc-button');
-    script.setAttribute('data-slug', 'sheldonatl');
-    script.setAttribute('data-color', '#FFDD00');
-    script.setAttribute('data-emoji', '');
-    script.setAttribute('data-font', 'Cookie');
-    script.setAttribute('data-text', 'Buy me a coffee');
-    script.setAttribute('data-outline-color', '#000000');
-    script.setAttribute('data-font-color', '#000000');
-    script.setAttribute('data-coffee-color', '#ffffff');
-    script.async = true;
-    document.head.appendChild(script);
-  }, []);
 
   const styles = [
     'Cinematic', 'Anime', 'Documentary', 'Vibrant Animation', 'Noir', 'Hyper-realistic', 'Fantasy', 'Sci-Fi'
@@ -267,8 +245,10 @@ Generate the structured output for all scenes now. Do not add any preamble, expl
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-500 to-red-500">
               Sora Prompt Tool
             </h1>
-            <p className="mt-4 text-lg text-slate-400">
-              The ultimate tool for crafting banger Sora Videos, multi-scene video prompts scene transitions and much more. From Ya Boy Sheldon!
+            <p className="mt-4 text-lg text-slate-400 leading-relaxed">
+              The ultimate tool for crafting banger Sora Videos, multi-scene video prompts,<br />
+              scene transitions and much more.
+              <span className="block mt-2 font-medium">Happy Prompting! - Sheldon</span>
             </p>
           </header>
 
@@ -493,6 +473,11 @@ Generate the structured output for all scenes now. Do not add any preamble, expl
           </main>
 
           <footer className="text-center mt-12 text-slate-600 text-sm">
+            <div className="mb-6 flex justify-center">
+              <a href="https://www.buymeacoffee.com/sheldonatl" target="_blank" rel="noopener noreferrer">
+                <img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=&slug=sheldonatl&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" alt="Buy me a coffee" />
+              </a>
+            </div>
             <p>&copy; {new Date().getFullYear()} Sora Prompt Tool. Built with React & Gemini.</p>
           </footer>
 
