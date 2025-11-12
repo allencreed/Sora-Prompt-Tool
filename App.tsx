@@ -1,0 +1,409 @@
+import React, { useState, useMemo } from 'react';
+import { GoogleGenAI } from "@google/genai";
+
+interface Scene {
+  id: number;
+  description: string;
+  style: string | null;
+  shotSize: string | null;
+  angle: string | null;
+  movement: string | null;
+  timeOfDay: string | null;
+  lighting: string | null;
+  transition: string | null;
+  dialogue: string;
+}
+
+const App: React.FC = () => {
+  const [scenes, setScenes] = useState<Scene[]>([
+    { id: 1, description: '', style: null, shotSize: null, angle: null, movement: null, timeOfDay: null, lighting: null, transition: null, dialogue: '' }
+  ]);
+  const [generatedPrompt, setGeneratedPrompt] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const styles = [
+    'Cinematic', 'Anime', 'Documentary', 'Vibrant Animation', 'Noir', 'Hyper-realistic', 'Fantasy', 'Sci-Fi'
+  ];
+  const shotSizes = [
+    'Extreme Wide Shot', 'Wide Shot (WS)', 'Full Shot (FS)', 'Medium Full Shot (MFS)',
+    'Medium Shot (MS)', 'Medium Close-Up (MCU)', 'Close-Up (CU)', 'Extreme Close-Up (ECU)'
+  ];
+  const angles = [
+    'Eye-Level Shot',
+    'Low-Angle Shot',
+    'High-Angle Shot',
+    "Bird's-Eye View",
+    'Dutch Angle',
+    "Worm's-Eye View",
+    'Over-the-Shoulder Shot',
+    'Point of View (POV) Shot',
+    'Two-Shot',
+    'Three-Shot',
+    'Master Shot'
+  ];
+  const movements = [
+    'Static',
+    'Pan',
+    'Tilt',
+    'Dolly (Tracking Shot)',
+    'Zoom',
+    'Crane/Boom Shot',
+    'Steadicam',
+    'Handheld',
+    'Pedestal',
+    'Truck (Crab)',
+    'Rack Focus (Focus Pull)',
+    'Push In',
+    'Pull Out',
+    '360-degree Spin'
+  ];
+  const transitions = [
+    'Cut', 'Fade to Black', 'Dissolve', 'Wipe', 'Push', 'Slide', 'J-Cut', 'L-Cut', 'Match Cut'
+  ];
+
+  const timesOfDay = [
+    'Morning', 'Afternoon', 'Evening', 'Night', 'Sunrise', 'Sunset', 'Golden Hour', 'Blue Hour'
+  ];
+
+  const lightingOptions = [
+    'Bright Daylight', 'Soft Ambient', 'Dramatic Shadows', 'Backlit', 'Neon Glow'
+  ];
+
+  const handleSceneChange = (index: number, field: keyof Scene, value: any) => {
+    const newScenes = [...scenes];
+    (newScenes[index] as any)[field] = value;
+    setScenes(newScenes);
+  };
+
+  const addScene = () => {
+    setScenes([...scenes, {
+      id: Date.now(),
+      description: '',
+      style: null,
+      shotSize: null,
+      angle: null,
+      movement: null,
+      timeOfDay: null,
+      lighting: null,
+      transition: 'Cut', // Default to a simple cut for new scenes
+      dialogue: ''
+    }]);
+  };
+
+  const removeScene = (index: number) => {
+    if (scenes.length > 1) {
+      const newScenes = scenes.filter((_, i) => i !== index);
+      setScenes(newScenes);
+    }
+  };
+
+
+  const handleGeneratePrompt = async () => {
+    const firstInvalidScene = scenes.find(s => !s.description || !s.style);
+    if (firstInvalidScene) {
+      setError(`Please complete the description and style for all scenes.`);
+      return;
+    }
+    
+    setError('');
+    setIsLoading(true);
+    setGeneratedPrompt('');
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      
+      const sceneBreakdown = scenes.map((scene, index) => `
+---
+Scene ${index + 1}:
+${index > 0 && scene.transition ? `- Transition from previous scene: "${scene.transition}"` : ''}
+- Description: "${scene.description}"
+- Style: "${scene.style}"
+- Time of Day: "${scene.timeOfDay || 'Not specified'}"
+- Lighting: "${scene.lighting || 'Not specified'}"
+- Shot Size: "${scene.shotSize || 'Not specified'}"
+- Camera Angle: "${scene.angle || 'Not specified'}"
+- Camera Movement: "${scene.movement || 'Not specified'}"
+${scene.dialogue ? `- Dialogue: "${scene.dialogue.replace(/"/g, "'")}"` : ''}
+`).join('');
+
+      const prompt = `You are an expert prompt engineer for the SORA text-to-video model. Your task is to take a user's scene-by-scene breakdown and expand it into a detailed, structured prompt.
+
+For EACH scene from the user's breakdown, generate a response strictly following this format, and separate each scene's output with a horizontal line (---).
+
+[Prose scene description in plain language. Incorporate the user's description, style, lighting, and time of day to describe characters, costumes, scenery, weather, lighting, and other details. Be very descriptive. If there is a transition, mention it at the end of the prose (e.g., "...the scene then dissolves to the next."). ]
+
+Cinematography:
+Camera shot: [Combine the user's selected shot size, camera angle, and movement here, e.g., "Medium Shot, Low-angle dolly shot"]
+Mood: [Infer an overall tone from the user's style and description, e.g., cinematic and tense, playful and suspenseful]
+
+Actions:
+- [Action 1: A clear, specific beat or gesture derived from the description]
+- [Action 2: Another distinct beat within the scene]
+- [Action 3: Another action or a line of dialogue being spoken]
+
+Dialogue:
+[${'If the user provided dialogue, list it here. Otherwise, state "No dialogue specified." '}]
+
+Here is the user's scene breakdown:
+${sceneBreakdown}
+---
+
+Generate the structured output for all scenes now. Do not add any preamble, explanation, or titles before the first scene's output.`;
+      
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-pro',
+        contents: prompt,
+      });
+
+      setGeneratedPrompt(response.text);
+
+    } catch (err) {
+      setError('Failed to generate prompt. Please try again.');
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCopy = () => {
+    if (generatedPrompt) {
+      navigator.clipboard.writeText(generatedPrompt);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const buttonClass = (isSelected: boolean) => 
+    `px-3 py-1.5 text-xs sm:px-4 sm:py-2 sm:text-sm font-medium rounded-lg transition-all duration-200 ease-in-out border-2 ${isSelected ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-500/30' : 'bg-slate-800/70 border-slate-700 hover:bg-slate-700/90 hover:border-purple-600'}`;
+  
+  const isGenerationDisabled = useMemo(() => {
+    return isLoading || scenes.some(s => !s.description || !s.style);
+  }, [isLoading, scenes]);
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-200 flex flex-col items-center p-4 sm:p-6 lg:p-8 font-sans">
+      <div className="w-full max-w-7xl mx-auto">
+        
+        <header className="text-center mb-10">
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-500 to-red-500">
+            Sora Prompt Tool
+          </h1>
+          <p className="mt-4 text-lg text-slate-400">
+            The ultimate tool for crafting banger Sora Videos, multi-scene video prompts scene transitions and much more. From Ya Boy Sheldon!
+          </p>
+        </header>
+
+        <main className="grid grid-cols-1 xl:grid-cols-2 gap-8 xl:items-start">
+          {/* Input and Configuration Column */}
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-slate-300">Your Scenes</h2>
+            </div>
+            {scenes.map((scene, index) => (
+              <div key={scene.id} className="bg-slate-900/50 rounded-2xl shadow-xl shadow-purple-500/10 backdrop-blur-sm border border-slate-700/50 p-6 space-y-6 relative">
+                 <div className="flex justify-between items-start">
+                    <h3 className="text-xl font-bold text-slate-200">Scene {index + 1}</h3>
+                    {scenes.length > 1 && (
+                        <button onClick={() => removeScene(index)} className="text-slate-500 hover:text-red-400 transition-colors" aria-label="Remove scene">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
+                        </button>
+                    )}
+                 </div>
+                {index > 0 && (
+                   <div>
+                    <label htmlFor={`transition-${scene.id}`} className="block text-sm font-medium text-slate-400 mb-2">Transition</label>
+                    <select
+                      id={`transition-${scene.id}`}
+                      value={scene.transition || ''}
+                      onChange={(e) => handleSceneChange(index, 'transition', e.target.value || null)}
+                      className="block w-full appearance-none cursor-pointer px-3 py-2 bg-slate-800/60 border border-slate-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 sm:text-sm transition-all"
+                      style={{
+                        backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                        backgroundPosition: 'right 0.5rem center',
+                        backgroundRepeat: 'no-repeat',
+                        backgroundSize: '1.5em 1.5em',
+                      }}
+                    >
+                      <option value="">Not Specified</option>
+                      {transitions.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label htmlFor={`description-${scene.id}`} className="block text-sm font-medium text-slate-400 mb-2">Description</label>
+                  <textarea
+                    id={`description-${scene.id}`}
+                    rows={3}
+                    className="block w-full px-4 py-2 bg-slate-800/60 border border-slate-700 rounded-lg shadow-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 sm:text-sm transition-all"
+                    placeholder={`e.g., A robot solving a Rubik's cube.`}
+                    value={scene.description}
+                    onChange={(e) => handleSceneChange(index, 'description', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor={`dialogue-${scene.id}`} className="block text-sm font-medium text-slate-400 mb-2">Dialogue <span className="font-normal text-slate-500">(Optional)</span></label>
+                  <textarea
+                    id={`dialogue-${scene.id}`}
+                    rows={2}
+                    className="block w-full px-4 py-2 bg-slate-800/60 border border-slate-700 rounded-lg shadow-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 sm:text-sm transition-all"
+                    placeholder={`e.g., "I've been expecting you."`}
+                    value={scene.dialogue}
+                    onChange={(e) => handleSceneChange(index, 'dialogue', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <h4 className="text-sm font-medium text-slate-400 mb-3">Style</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                    {styles.map(style => <button key={style} onClick={() => handleSceneChange(index, 'style', style)} className={buttonClass(scene.style === style)}>{style}</button>)}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                   <div>
+                    <label htmlFor={`shotSize-${scene.id}`} className="block text-sm font-medium text-slate-400 mb-2">Shot Size</label>
+                    <select
+                      id={`shotSize-${scene.id}`}
+                      value={scene.shotSize || ''}
+                      onChange={(e) => handleSceneChange(index, 'shotSize', e.target.value || null)}
+                      className="block w-full appearance-none cursor-pointer px-3 py-2 bg-slate-800/60 border border-slate-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 sm:text-sm transition-all"
+                      style={{
+                        backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                        backgroundPosition: 'right 0.5rem center',
+                        backgroundRepeat: 'no-repeat',
+                        backgroundSize: '1.5em 1.5em',
+                      }}
+                    >
+                      <option value="">Not Specified</option>
+                      {shotSizes.map(size => <option key={size} value={size}>{size}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor={`angle-${scene.id}`} className="block text-sm font-medium text-slate-400 mb-2">Camera Angle</label>
+                    <select
+                      id={`angle-${scene.id}`}
+                      value={scene.angle || ''}
+                      onChange={(e) => handleSceneChange(index, 'angle', e.target.value || null)}
+                      className="block w-full appearance-none cursor-pointer px-3 py-2 bg-slate-800/60 border border-slate-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 sm:text-sm transition-all"
+                      style={{
+                        backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                        backgroundPosition: 'right 0.5rem center',
+                        backgroundRepeat: 'no-repeat',
+                        backgroundSize: '1.5em 1.5em',
+                      }}
+                    >
+                      <option value="">Not Specified</option>
+                      {angles.map(angle => <option key={angle} value={angle}>{angle}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor={`movement-${scene.id}`} className="block text-sm font-medium text-slate-400 mb-2">Camera Movement</label>
+                    <select
+                      id={`movement-${scene.id}`}
+                      value={scene.movement || ''}
+                      onChange={(e) => handleSceneChange(index, 'movement', e.target.value || null)}
+                      className="block w-full appearance-none cursor-pointer px-3 py-2 bg-slate-800/60 border border-slate-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 sm:text-sm transition-all"
+                       style={{
+                        backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                        backgroundPosition: 'right 0.5rem center',
+                        backgroundRepeat: 'no-repeat',
+                        backgroundSize: '1.5em 1.5em',
+                      }}
+                    >
+                      <option value="">Not Specified</option>
+                      {movements.map(movement => <option key={movement} value={movement}>{movement}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor={`timeOfDay-${scene.id}`} className="block text-sm font-medium text-slate-400 mb-2">Time of Day</label>
+                    <select
+                      id={`timeOfDay-${scene.id}`}
+                      value={scene.timeOfDay || ''}
+                      onChange={(e) => handleSceneChange(index, 'timeOfDay', e.target.value || null)}
+                      className="block w-full appearance-none cursor-pointer px-3 py-2 bg-slate-800/60 border border-slate-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 sm:text-sm transition-all"
+                       style={{
+                        backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                        backgroundPosition: 'right 0.5rem center',
+                        backgroundRepeat: 'no-repeat',
+                        backgroundSize: '1.5em 1.5em',
+                      }}
+                    >
+                      <option value="">Not Specified</option>
+                      {timesOfDay.map(time => <option key={time} value={time}>{time}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor={`lighting-${scene.id}`} className="block text-sm font-medium text-slate-400 mb-2">Lighting</label>
+                    <select
+                      id={`lighting-${scene.id}`}
+                      value={scene.lighting || ''}
+                      onChange={(e) => handleSceneChange(index, 'lighting', e.target.value || null)}
+                      className="block w-full appearance-none cursor-pointer px-3 py-2 bg-slate-800/60 border border-slate-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 sm:text-sm transition-all"
+                       style={{
+                        backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                        backgroundPosition: 'right 0.5rem center',
+                        backgroundRepeat: 'no-repeat',
+                        backgroundSize: '1.5em 1.5em',
+                      }}
+                    >
+                      <option value="">Not Specified</option>
+                      {lightingOptions.map(light => <option key={light} value={light}>{light}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            ))}
+            <button onClick={addScene} className="w-full text-center px-6 py-3 border-2 border-dashed border-slate-600 rounded-lg text-slate-400 hover:border-purple-500 hover:text-purple-400 transition-all duration-200">
+                + Add Another Scene
+            </button>
+             <button 
+              onClick={handleGeneratePrompt}
+              disabled={isGenerationDisabled}
+              className="w-full sticky bottom-4 inline-flex items-center justify-center px-6 py-4 border border-transparent text-base font-bold rounded-xl text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 focus:ring-offset-slate-950 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg shadow-purple-500/20 hover:shadow-xl hover:shadow-purple-500/40 transform hover:scale-105"
+            >
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Crafting...
+                </>
+              ) : '✨ Craft My Prompt'}
+            </button>
+            {error && <p className="text-red-400 text-sm mt-2 text-center">{error}</p>}
+          </div>
+
+          {/* Output Column */}
+          <div className="bg-slate-900/50 rounded-2xl shadow-inner-lg backdrop-blur-sm border border-slate-700/50 p-6 sm:p-8 relative xl:sticky top-8">
+             <h3 className="text-lg font-semibold text-slate-300 mb-4">Your Crafted SORA Prompt</h3>
+            <div className="relative">
+              <textarea
+                readOnly
+                aria-label="Generated SORA prompt"
+                value={isLoading ? 'Generating your creative prompt...' : generatedPrompt || 'Your prompt will appear here...'}
+                className="w-full h-72 p-4 bg-slate-800/40 border border-slate-700/80 rounded-lg text-slate-300 placeholder-slate-500 resize-none focus:outline-none font-mono text-sm leading-relaxed"
+              />
+              {generatedPrompt && (
+                <button 
+                  onClick={handleCopy}
+                  className="absolute top-2 right-2 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors duration-200 bg-slate-700/80 text-slate-300 hover:bg-purple-600 hover:text-white"
+                  aria-label="Copy prompt to clipboard"
+                >
+                  {copied ? 'Copied!' : 'Copy'}
+                </button>
+              )}
+            </div>
+          </div>
+        </main>
+
+        <footer className="text-center mt-12 text-slate-600 text-sm">
+          <p>&copy; {new Date().getFullYear()} Sora Prompt Tool. Built with React & Gemini.</p>
+        </footer>
+
+      </div>
+    </div>
+  );
+};
+
+export default App;

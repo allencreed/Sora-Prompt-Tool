@@ -1,0 +1,5 @@
+{
+  "name": "Sora Prompt Tool",
+  "description": "A progressive web app to help users create customized, detailed prompts for generating videos with SORA.",
+  "requestFramePermissions": []
+}
