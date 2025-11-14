@@ -15,27 +15,44 @@ interface Scene {
   dialogue: string;
 }
 
-const animationStyles = `
-  @keyframes float1 {
+const auroraAnimationStyles = `
+  @keyframes aurora-1 {
     0%, 100% { transform: translate(0, 0) scale(1); }
-    50% { transform: translate(20px, 40px) scale(1.1); }
+    50% { transform: translate(30vw, -20vh) scale(1.2); }
   }
-  @keyframes float2 {
+  @keyframes aurora-2 {
     0%, 100% { transform: translate(0, 0) scale(1); }
-    50% { transform: translate(-30px, -15px) scale(1.1); }
+    50% { transform: translate(-25vw, 30vh) scale(0.9); }
+  }
+  @keyframes aurora-3 {
+    0%, 100% { transform: translate(0, 0) rotate(0deg); }
+    50% { transform: translate(20vw, 15vh) rotate(10deg) scale(1.1); }
+  }
+  @keyframes aurora-4 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(-20vw, -15vh) scale(1.1); }
   }
 `;
-const ColorBands = () => (
+
+const AuroraBackground = () => (
   <>
-    <style>{animationStyles}</style>
+    <style>{auroraAnimationStyles}</style>
     <div className="fixed inset-0 -z-10 overflow-hidden bg-slate-950">
       <div 
-        className="absolute top-[-20%] left-[10%] w-96 h-96 bg-gradient-to-br from-purple-600 to-pink-500 rounded-full filter blur-3xl opacity-20"
-        style={{ animation: 'float1 15s ease-in-out infinite' }}
+        className="absolute top-[-50vh] left-[-30vw] w-[100vw] h-[100vw] sm:w-[80vw] sm:h-[80vw] bg-gradient-to-br from-purple-600 to-pink-500 rounded-full filter blur-3xl opacity-20"
+        style={{ animation: 'aurora-1 20s ease-in-out infinite alternate' }}
       />
       <div 
-        className="absolute bottom-[-10%] right-[5%] w-96 h-96 bg-gradient-to-tr from-blue-500 to-teal-400 rounded-full filter blur-3xl opacity-15"
-        style={{ animation: 'float2 18s ease-in-out infinite' }}
+        className="absolute bottom-[-50vh] right-[-30vw] w-[100vw] h-[100vw] sm:w-[80vw] sm:h-[80vw] bg-gradient-to-tr from-blue-500 to-teal-400 rounded-full filter blur-3xl opacity-15"
+        style={{ animation: 'aurora-2 25s ease-in-out infinite alternate' }}
+      />
+      <div 
+        className="hidden sm:block absolute top-[10vh] right-[5vw] w-[50vw] h-[50vw] bg-gradient-to-bl from-pink-500 via-red-400 to-yellow-500 rounded-full filter blur-3xl opacity-10"
+        style={{ animation: 'aurora-3 18s ease-in-out infinite alternate' }}
+      />
+       <div 
+        className="hidden sm:block absolute bottom-[5vh] left-[5vw] w-[40vw] h-[40vw] bg-gradient-to-tr from-cyan-400 to-green-300 rounded-full filter blur-3xl opacity-10"
+        style={{ animation: 'aurora-4 22s ease-in-out infinite alternate' }}
       />
     </div>
   </>
@@ -142,13 +159,7 @@ const App: React.FC = () => {
       return;
     }
     
-    // 2. Check for API key before showing loading state
-    if (!process.env.API_KEY) {
-      setError("It looks like the API Key is missing. Please make sure it's configured correctly before generating a prompt.");
-      return;
-    }
-
-    // 3. Set loading state and clear previous results
+    // 2. Set loading state and clear previous results
     setError('');
     setIsLoading(true);
     setGeneratedPrompt('');
@@ -171,29 +182,29 @@ ${index > 0 && scene.transition ? `- Transition from previous scene: "${scene.tr
 ${scene.dialogue ? `- Dialogue: "${scene.dialogue.replace(/"/g, "'")}"` : ''}
 `).join('');
 
-      const prompt = `You are an expert prompt engineer for the SORA text-to-video model. Your task is to take a user's scene-by-scene breakdown and expand it into a detailed, structured prompt.
+      const prompt = `You are an expert prompt engineer for the SORA text-to-video model. Your task is to take a user's scene-by-scene breakdown and expand it into a detailed, structured prompt using Markdown for formatting.
 
 For EACH scene from the user's breakdown, generate a response strictly following this format, and separate each scene's output with a horizontal line (---).
 
-[Prose scene description in plain language. Incorporate the user's description, style, lighting, time of day, and actor movements to describe characters, costumes, scenery, weather, lighting, and other details. Be very descriptive. If there is a transition, mention it at the end of the prose (e.g., "...the scene then dissolves to the next."). ]
+[Prose scene description in plain language. Incorporate the user's description, style, lighting, time of day, and actor movements to describe characters, costumes, scenery, weather, lighting, and other details. Be very descriptive and **bold** key visual elements. If there is a transition, mention it at the end of the prose (e.g., "...the scene then dissolves to the next."). ]
 
-Cinematography:
-Camera shot: [Combine the user's selected shot size, camera angle, and movement here, e.g., "Medium Shot, Low-angle dolly shot"]
-Mood: [Infer an overall tone from the user's style and description, e.g., cinematic and tense, playful and suspenseful]
+**Cinematography:**
+- **Camera shot:** [Combine the user's selected shot size, camera angle, and movement here, e.g., "Medium Shot, Low-angle dolly shot"]
+- **Mood:** [Infer an overall tone from the user's style and description, e.g., cinematic and tense, playful and suspenseful]
 
-Actions:
+**Actions:**
 - [Action 1: A clear, specific beat or gesture derived from the description and specified actor movement]
 - [Action 2: Another distinct beat within the scene]
 - [Action 3: Another action or a line of dialogue being spoken]
 
-Dialogue:
-[${'If the user provided dialogue, list it here. Otherwise, state "No dialogue specified." '}]
+**Dialogue:**
+[${'If the user provided dialogue, list it here. Otherwise, state "*No dialogue specified.*" '}]
 
 Here is the user's scene breakdown:
 ${sceneBreakdown}
 ---
 
-Generate the structured output for all scenes now. Do not add any preamble, explanation, or titles before the first scene's output.`;
+Generate the structured output for all scenes now. Use Markdown for all formatting (bolding, bullet points). Do not add any preamble, explanation, or titles before the first scene's output.`;
       
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-pro',
@@ -237,7 +248,7 @@ Generate the structured output for all scenes now. Do not add any preamble, expl
 
   return (
     <>
-      <ColorBands />
+      <AuroraBackground />
       <div className="min-h-screen text-slate-200 flex flex-col items-center p-4 sm:p-6 lg:p-8 font-sans">
         <div className="w-full max-w-7xl mx-auto">
           
