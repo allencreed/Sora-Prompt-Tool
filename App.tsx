@@ -15,7 +15,8 @@ interface Scene {
   dialogue: string;
 }
 
-const API_KEY = 'AIzaSyBxhBR4yhssoAvxSGxUkGLr5ADaZrbFn-g';
+// Safely access process.env or fall back to the provided key
+const API_KEY = (typeof process !== 'undefined' && process.env?.API_KEY) || 'AIzaSyBxhBR4yhssoAvxSGxUkGLr5ADaZrbFn-g';
 
 const auroraAnimationStyles = `
   @keyframes aurora-1 {
@@ -113,6 +114,8 @@ const App: React.FC = () => {
     setError(''); 
 
     try {
+        if (!API_KEY) throw new Error("API Key is missing.");
+        
         const ai = new GoogleGenAI({ apiKey: API_KEY });
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
@@ -241,6 +244,8 @@ const App: React.FC = () => {
     setGeneratedPrompt('');
 
     try {
+      if (!API_KEY) throw new Error("API Key is missing.");
+
       const ai = new GoogleGenAI({ apiKey: API_KEY });
       
       const sceneBreakdown = scenes.map((scene, index) => `
@@ -330,7 +335,9 @@ Generate the structured output for all scenes now. Use Markdown for all formatti
 
       if (outputFormat === 'json' && text) {
           try {
-             const parsed = JSON.parse(text);
+             // Clean potential markdown blocks from the JSON response
+             const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
+             const parsed = JSON.parse(cleanText);
              text = JSON.stringify(parsed, null, 2);
           } catch(e) {
              console.error("JSON parse error", e);
