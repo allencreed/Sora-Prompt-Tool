@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { GoogleGenAI } from "@google/genai";
+import React, { useState, useMemo, useEffect } from 'react';
+import { GoogleGenAI, Type } from "@google/genai";
 
 interface Scene {
   id: number;
@@ -58,6 +58,42 @@ const AuroraBackground = () => (
   </>
 );
 
+const ConnectionStatusButton: React.FC<{ status: 'idle' | 'checking' | 'success' | 'error'; onClick: () => void; }> = ({ status, onClick }) => {
+  const baseClasses = "flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-300 ease-in-out border";
+  
+  switch (status) {
+    case 'checking':
+      return (
+        <span className={`${baseClasses} bg-yellow-500/10 border-yellow-500/30 text-yellow-400 cursor-wait`}>
+          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+          Checking...
+        </span>
+      );
+    case 'success':
+      return (
+         <span className={`${baseClasses} bg-green-500/10 border-green-500/30 text-green-400`}>
+           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+            Connected
+         </span>
+      );
+    case 'error':
+       return (
+         <button onClick={onClick} className={`${baseClasses} bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20`}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
+            Check Again
+         </button>
+       );
+    case 'idle':
+    default:
+      return (
+        <button onClick={onClick} className={`${baseClasses} bg-slate-800/70 border-slate-700 hover:bg-slate-700/90 hover:border-purple-600 text-slate-300`}>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.707 3.293a1 1 0 010 1.414L6.414 9H16a1 1 0 110 2H6.414l4.293 4.293a1 1 0 01-1.414 1.414l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+          Check API Connection
+        </button>
+      );
+  }
+};
+
 
 const App: React.FC = () => {
   const [scenes, setScenes] = useState<Scene[]>([
@@ -67,6 +103,72 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [apiKeyReady, setApiKeyReady] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'idle' | 'checking' | 'success' | 'error'>('idle');
+  const [outputFormat, setOutputFormat] = useState<'markdown' | 'json'>('markdown');
+
+
+  useEffect(() => {
+    const checkApiKey = async () => {
+      try {
+        if (await window.aistudio.hasSelectedApiKey()) {
+          setApiKeyReady(true);
+        }
+      } catch (e) {
+        console.error("Could not check for API key:", e);
+      }
+    };
+    checkApiKey();
+  }, []);
+
+  const handleSelectKey = async () => {
+    setError('');
+    try {
+      await window.aistudio.openSelectKey();
+      // Assume success to handle race condition and show the app immediately
+      setApiKeyReady(true);
+    } catch(e) {
+      console.error("Could not open API key selection:", e);
+      setError("Could not open API key selection dialog.");
+    }
+  };
+  
+  const handleCheckConnection = async () => {
+    setConnectionStatus('checking');
+    setError(''); // Clear previous errors
+
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: 'test',
+        });
+
+        if (response.text) {
+            setConnectionStatus('success');
+            setTimeout(() => setConnectionStatus('idle'), 3000); // Reset after 3 seconds
+        } else {
+            throw new Error("Received an empty response from the API.");
+        }
+
+    } catch (err) {
+        setConnectionStatus('error');
+        setTimeout(() => setConnectionStatus('idle'), 5000); // Reset after 5 seconds
+
+        let errorMessage = 'Failed to connect to the API. Please try again.';
+        if (err instanceof Error && err.message) {
+            if (err.message.toLowerCase().includes('api key') || err.message.includes('requested entity was not found')) {
+                errorMessage = 'Your API Key is invalid or has insufficient permissions. Please select a valid key.';
+                setApiKeyReady(false); // Force re-selection of the key
+            } else {
+                console.error("Connection Check Error:", err.message);
+            }
+        } else {
+            console.error("An unknown error occurred during connection check:", err);
+        }
+        setError(errorMessage);
+    }
+};
 
   const styles = [
     'Cinematic', 'Anime', 'Documentary', 'Vibrant Animation', 'Noir', 'Hyper-realistic', 'Fantasy', 'Sci-Fi'
@@ -182,7 +284,44 @@ ${index > 0 && scene.transition ? `- Transition from previous scene: "${scene.tr
 ${scene.dialogue ? `- Dialogue: "${scene.dialogue.replace(/"/g, "'")}"` : ''}
 `).join('');
 
-      const prompt = `You are an expert prompt engineer for the SORA text-to-video model. Your task is to take a user's scene-by-scene breakdown and expand it into a detailed, structured prompt using Markdown for formatting.
+      let prompt = '';
+      let config: any = {};
+
+      if (outputFormat === 'json') {
+          prompt = `You are an expert prompt engineer for the SORA text-to-video model. 
+          Analyze the user's scene breakdown and generate a JSON response that follows the provided schema.
+          
+          Here is the user's scene breakdown:
+          ${sceneBreakdown}`;
+
+          config = {
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    scene_number: { type: Type.INTEGER },
+                    visual_description: { type: Type.STRING, description: "Prose description including style, lighting, time of day." },
+                    cinematography: {
+                        type: Type.OBJECT,
+                        properties: {
+                            camera_shot: { type: Type.STRING, description: "Combined shot size, angle, and movement." },
+                            mood: { type: Type.STRING }
+                        }
+                    },
+                    actions: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING, description: "List of distinct actions." }
+                    },
+                    dialogue: { type: Type.STRING, description: "Dialogue or 'No dialogue specified'." }
+                  },
+                  required: ["scene_number", "visual_description", "cinematography", "actions"]
+                }
+              }
+          };
+      } else {
+        prompt = `You are an expert prompt engineer for the SORA text-to-video model. Your task is to take a user's scene-by-scene breakdown and expand it into a detailed, structured prompt using Markdown for formatting.
 
 For EACH scene from the user's breakdown, generate a response strictly following this format, and separate each scene's output with a horizontal line (---).
 
@@ -205,21 +344,35 @@ ${sceneBreakdown}
 ---
 
 Generate the structured output for all scenes now. Use Markdown for all formatting (bolding, bullet points). Do not add any preamble, explanation, or titles before the first scene's output.`;
+      }
       
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-pro',
+        model: 'gemini-3-pro-preview',
         contents: prompt,
+        config: config
       });
 
-      setGeneratedPrompt(response.text);
+      let text = response.text || '';
+
+      if (outputFormat === 'json' && text) {
+          try {
+             const parsed = JSON.parse(text);
+             text = JSON.stringify(parsed, null, 2);
+          } catch(e) {
+             console.error("JSON parse error", e);
+             // Leave text as is if parsing fails
+          }
+      }
+
+      setGeneratedPrompt(text);
 
     } catch (err) {
       let errorMessage = 'An unexpected error occurred. Please try again later.';
       if (err instanceof Error && err.message) {
-        if (err.message.includes('API key not valid')) {
-            errorMessage = 'The provided API Key is invalid. Please check your configuration and try again.';
+        if (err.message.toLowerCase().includes('api key') || err.message.includes('requested entity was not found')) {
+            errorMessage = 'There is an issue with your API Key. Please select it again.';
+            setApiKeyReady(false);
         } else {
-             // Keep the generic error for other cases, but log the specific one
              console.error("Gemini API Error:", err.message);
         }
       } else {
@@ -245,6 +398,35 @@ Generate the structured output for all scenes now. Use Markdown for all formatti
   const isGenerationDisabled = useMemo(() => {
     return isLoading || scenes.some(s => !s.description || !s.style);
   }, [isLoading, scenes]);
+  
+  if (!apiKeyReady) {
+    return (
+      <>
+        <AuroraBackground />
+        <div className="min-h-screen flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-slate-900/50 rounded-2xl shadow-xl shadow-purple-500/10 backdrop-blur-sm border border-slate-700/50 p-8 text-center">
+            <h2 className="text-2xl font-bold text-slate-200 mb-4">Select API Key</h2>
+            <p className="text-slate-400 mb-6">
+              To use this prompt generation tool, please select your Google AI API key.
+            </p>
+            <button
+              onClick={handleSelectKey}
+              className="w-full inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-bold rounded-xl text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 focus:ring-offset-slate-950 transition-all duration-300 shadow-lg shadow-purple-500/20 hover:shadow-xl hover:shadow-purple-500/40 transform hover:scale-105"
+            >
+              Select Your API Key
+            </button>
+            <p className="text-xs text-slate-500 mt-4">
+              Your API key is required to make requests to the Gemini API. For information on billing, please visit{' '}
+              <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="underline hover:text-purple-400">
+                ai.google.dev/gemini-api/docs/billing
+              </a>.
+            </p>
+             {error && <p className="text-red-400 text-sm mt-4">{error}</p>}
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -268,6 +450,7 @@ Generate the structured output for all scenes now. Use Markdown for all formatti
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                   <h2 className="text-2xl font-bold text-slate-300">Your Scenes</h2>
+                  <ConnectionStatusButton status={connectionStatus} onClick={handleCheckConnection} />
               </div>
               {scenes.map((scene, index) => (
                 <div key={scene.id} className="bg-slate-900/50 rounded-2xl shadow-xl shadow-purple-500/10 backdrop-blur-sm border border-slate-700/50 p-6 space-y-6 relative">
@@ -442,21 +625,47 @@ Generate the structured output for all scenes now. Use Markdown for all formatti
               <button onClick={addScene} className="w-full text-center px-6 py-3 border-2 border-dashed border-slate-600 rounded-lg text-slate-400 hover:border-purple-500 hover:text-purple-400 transition-all duration-200">
                   + Add Another Scene
               </button>
-               <button 
-                onClick={handleGeneratePrompt}
-                disabled={isGenerationDisabled}
-                className="w-full sticky bottom-4 inline-flex items-center justify-center px-6 py-4 border border-transparent text-base font-bold rounded-xl text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 focus:ring-offset-slate-950 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg shadow-purple-500/20 hover:shadow-xl hover:shadow-purple-500/40 transform hover:scale-105"
-              >
-                {isLoading ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Crafting...
-                  </>
-                ) : '✨ Craft My Prompt'}
-              </button>
+              
+              <div className="flex flex-col gap-2">
+                 <div className="flex bg-slate-800/60 p-1 rounded-lg border border-slate-700">
+                  <button
+                    onClick={() => setOutputFormat('markdown')}
+                    className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
+                      outputFormat === 'markdown' 
+                        ? 'bg-slate-700 text-white shadow-sm' 
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Markdown
+                  </button>
+                  <button
+                    onClick={() => setOutputFormat('json')}
+                    className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
+                      outputFormat === 'json' 
+                        ? 'bg-purple-600 text-white shadow-sm' 
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    JSON
+                  </button>
+                </div>
+
+                <button 
+                  onClick={handleGeneratePrompt}
+                  disabled={isGenerationDisabled}
+                  className="w-full inline-flex items-center justify-center px-6 py-4 border border-transparent text-base font-bold rounded-xl text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 focus:ring-offset-slate-950 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg shadow-purple-500/20 hover:shadow-xl hover:shadow-purple-500/40 transform hover:scale-105"
+                >
+                  {isLoading ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Crafting...
+                    </>
+                  ) : '✨ Craft My Prompt'}
+                </button>
+              </div>
               {error && <p className="text-red-400 text-sm mt-2 text-center">{error}</p>}
             </div>
 
