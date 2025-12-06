@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
 
 interface Scene {
@@ -14,6 +14,8 @@ interface Scene {
   transition: string | null;
   dialogue: string;
 }
+
+const API_KEY = 'AIzaSyBxhBR4yhssoAvxSGxUkGLr5ADaZrbFn-g';
 
 const auroraAnimationStyles = `
   @keyframes aurora-1 {
@@ -103,42 +105,15 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
-  const [apiKeyReady, setApiKeyReady] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'checking' | 'success' | 'error'>('idle');
   const [outputFormat, setOutputFormat] = useState<'markdown' | 'json'>('markdown');
 
-
-  useEffect(() => {
-    const checkApiKey = async () => {
-      try {
-        if (await window.aistudio.hasSelectedApiKey()) {
-          setApiKeyReady(true);
-        }
-      } catch (e) {
-        console.error("Could not check for API key:", e);
-      }
-    };
-    checkApiKey();
-  }, []);
-
-  const handleSelectKey = async () => {
-    setError('');
-    try {
-      await window.aistudio.openSelectKey();
-      // Assume success to handle race condition and show the app immediately
-      setApiKeyReady(true);
-    } catch(e) {
-      console.error("Could not open API key selection:", e);
-      setError("Could not open API key selection dialog.");
-    }
-  };
-  
   const handleCheckConnection = async () => {
     setConnectionStatus('checking');
-    setError(''); // Clear previous errors
+    setError(''); 
 
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const ai = new GoogleGenAI({ apiKey: API_KEY });
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: 'test',
@@ -146,20 +121,19 @@ const App: React.FC = () => {
 
         if (response.text) {
             setConnectionStatus('success');
-            setTimeout(() => setConnectionStatus('idle'), 3000); // Reset after 3 seconds
+            setTimeout(() => setConnectionStatus('idle'), 3000); 
         } else {
             throw new Error("Received an empty response from the API.");
         }
 
     } catch (err) {
         setConnectionStatus('error');
-        setTimeout(() => setConnectionStatus('idle'), 5000); // Reset after 5 seconds
+        setTimeout(() => setConnectionStatus('idle'), 5000); 
 
         let errorMessage = 'Failed to connect to the API. Please try again.';
         if (err instanceof Error && err.message) {
             if (err.message.toLowerCase().includes('api key') || err.message.includes('requested entity was not found')) {
-                errorMessage = 'Your API Key is invalid or has insufficient permissions. Please select a valid key.';
-                setApiKeyReady(false); // Force re-selection of the key
+                errorMessage = 'The provided API Key is invalid or has insufficient permissions.';
             } else {
                 console.error("Connection Check Error:", err.message);
             }
@@ -267,7 +241,7 @@ const App: React.FC = () => {
     setGeneratedPrompt('');
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: API_KEY });
       
       const sceneBreakdown = scenes.map((scene, index) => `
 ---
@@ -370,8 +344,7 @@ Generate the structured output for all scenes now. Use Markdown for all formatti
       let errorMessage = 'An unexpected error occurred. Please try again later.';
       if (err instanceof Error && err.message) {
         if (err.message.toLowerCase().includes('api key') || err.message.includes('requested entity was not found')) {
-            errorMessage = 'There is an issue with your API Key. Please select it again.';
-            setApiKeyReady(false);
+            errorMessage = 'There is an issue with the API Key.';
         } else {
              console.error("Gemini API Error:", err.message);
         }
@@ -398,35 +371,6 @@ Generate the structured output for all scenes now. Use Markdown for all formatti
   const isGenerationDisabled = useMemo(() => {
     return isLoading || scenes.some(s => !s.description || !s.style);
   }, [isLoading, scenes]);
-  
-  if (!apiKeyReady) {
-    return (
-      <>
-        <AuroraBackground />
-        <div className="min-h-screen flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-slate-900/50 rounded-2xl shadow-xl shadow-purple-500/10 backdrop-blur-sm border border-slate-700/50 p-8 text-center">
-            <h2 className="text-2xl font-bold text-slate-200 mb-4">Select API Key</h2>
-            <p className="text-slate-400 mb-6">
-              To use this prompt generation tool, please select your Google AI API key.
-            </p>
-            <button
-              onClick={handleSelectKey}
-              className="w-full inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-bold rounded-xl text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 focus:ring-offset-slate-950 transition-all duration-300 shadow-lg shadow-purple-500/20 hover:shadow-xl hover:shadow-purple-500/40 transform hover:scale-105"
-            >
-              Select Your API Key
-            </button>
-            <p className="text-xs text-slate-500 mt-4">
-              Your API key is required to make requests to the Gemini API. For information on billing, please visit{' '}
-              <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="underline hover:text-purple-400">
-                ai.google.dev/gemini-api/docs/billing
-              </a>.
-            </p>
-             {error && <p className="text-red-400 text-sm mt-4">{error}</p>}
-          </div>
-        </div>
-      </>
-    );
-  }
 
   return (
     <>
